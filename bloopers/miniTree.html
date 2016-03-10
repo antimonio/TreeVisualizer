@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html>
+<head lang="en">
+	<meta charset="UTF-8">
+	<title>Tree Visualizer</title>
+	<style type="text/css">
+		body { background: #eee; }
+		.content {
+			display: block;
+			position: relative;
+		}
+		.tree {
+			position: absolute;
+			left: 0px;
+			top: 0;
+			background: #222;
+			border: 8px solid red;
+		}
+		.controls {
+			position: absolute;
+			left: 816px;
+			top: 0;
+			margin: 16px;
+		}
+	</style>
+
+</head>
+<body onload="setup()">
+	<div class="content">
+		<canvas id="tree" class="tree" width="800" height="800"></canvas>
+		<div class="controls">
+			<h1>Analyser Trigger Values</h1>
+			<div>
+				<label for=smoothy>Smoothing Time</label>
+				<input type=range min=0 max=1 value=0 id=smoothy step=0.05 oninput="createjs.proxy(handleSlider(value, 'SMOOTHING_TIME'),this)">
+				<output for=smoothy id=smoothyOut>1.00</output>
+			</div>
+			<div>
+				<label for=trigger>Draw Trigger</label>
+				<input type=range min=0 max=0.1 value=0 id=trigger step=0.001 oninput="createjs.proxy(handleSlider(value, 'drawTrigger'),this)">
+				<output for=drawTrigger id=triggerOut>0.15</output>
+			</div>
+			<div>
+				<label for=stopTrigger>Stop Draw Trigger</label>
+				<input type=range min=0 max=0.2 value=0.015 id=stopTrigger step=0.001 oninput="createjs.proxy(handleSlider(value, 'stopDrawTrigger'),this)">
+				<output for=stopTrigger id=stopTriggerOut>0.15</output>
+			</div>
+			<div>
+				<label for=trigTime>Trigger Time Delay</label>
+				<input type=range min=0 max=32 value=8 id=trigTime step=1 oninput="createjs.proxy(handleSlider(value, 'TRIG_TICKS_DEFAULT'),this)">
+				<output for=trigTime id=trigTimeOut>8</output>
+			</div>
+
+			<h1>Draw Values</h1>
+			<div>
+				<label for=treeSize>Tree Max Size</label>
+				<input type=range min=0 max=80 value=40 id=treeSize step=1 oninput="createjs.proxy(handleSlider(value, 'maxSize'),this)">
+				<output for=treeSize id=treeSizeOut>8</output>
+			</div>
+			<div>
+				<label for=treegr>Branch Factor</label>
+				<input type=range min=1 max=2.5 value=1.618 id=treegr step=0.001 oninput="createjs.proxy(handleSlider(value, 'gr'),this)">
+				<output for=treegr id=treegrOut>8</output>
+			</div>
+		</div>
+	</div>
+	<script src="../js/easeljs-NEXT.combined.js"></script>
+	<script src="../js/soundjs-NEXT.combined.js"></script>
+	<script src="../js/Rnd.js"></script>
+	<script src="../js/Wander.js"></script>
+
+	<script>
+		// TODO add file selector with default option
+		var c = createjs;
+
+// Audio setup code
+		var FFTSIZE = 32;	// number of samples for the analyser node FFT, min 32
+		var SMOOTHING_TIME = 0.80;
+		var src = "../audio/TheHangingTree.mp3";
+		var soundInstance, analyserNode, freqByteData, timeByteData, frequencyBinCount;
+
+
+// Analyser code for triggering draws
+		var TRIG_TICKS_DEFAULT = 3;
+		var dataAverage = [0.5, 0.5, 0.5, 0.5];
+		var longAverage = [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5];
+		var drawTrigger = 0.015, stopDrawTrigger = 0.020;
+		var triggerTicks = TRIG_TICKS_DEFAULT;
+
+
+// Tree Graphics code
+		var gr=1.618;
+		var maxSize=50;
+		var stage, w, h, branches, currentBranch, shape, g, listener;
+
+
+// Tools and inputs
+		var elHash = {};
+		var showTools = true;
+		var r, dt, r2, st, bl;
+
+
+// Setup
+		function setup() {
+			if (!c.Sound.registerPlugins([c.WebAudioPlugin])) {
+				console.log("Web Audio capable browser is required.")
+				return;
+			}
+
+			setupInputs();
+
+			c.Sound.addEventListener("fileload", c.proxy(handleLoad, this));
+			c.Sound.registerSound(src);
+		}
+
+		function  setupInputs() {
+			var el = elHash["SMOOTHING_TIME"] = document.querySelector("#smoothyOut");
+			var slider = document.querySelector("#smoothy");
+			slider.value = el.value = this["SMOOTHING_TIME"];
+
+			el = elHash["drawTrigger"] = document.querySelector("#triggerOut");
+			slider = document.querySelector("#trigger");
+			slider.value = el.value = this["drawTrigger"];
+
+			el = elHash["stopDrawTrigger"] = document.querySelector("#stopTriggerOut");
+			slider = document.querySelector("#stopTrigger");
+			slider.value = el.value = this["stopDrawTrigger"];
+
+			el = elHash["TRIG_TICKS_DEFAULT"] = document.querySelector("#trigTimeOut");
+			slider = document.querySelector("#trigTime");
+			slider.value = el.value = this["TRIG_TICKS_DEFAULT"];
+
+			el = elHash["maxSize"] = document.querySelector("#treeSizeOut");
+			slider = document.querySelector("#treeSize");
+			slider.value = el.value = this["maxSize"];
+
+			el = elHash["gr"] = document.querySelector("#treegrOut");
+			slider = document.querySelector("#treegr");
+			slider.value = el.value = this["gr"];
+		}
+
+		function handleSlider(val, hashString) {
+			this.elHash[hashString].value = val;
+			this[hashString] = val;
+		}
+
+		function handleLoad(evt) {
+			var context = c.Sound.activePlugin.context;
+
+			analyserNode = context.createAnalyser();
+			analyserNode.fftSize = FFTSIZE;  //The size of the FFT used for frequency-domain analysis. This must be a power of two
+			analyserNode.smoothingTimeConstant = SMOOTHING_TIME;  //A value from 0 -> 1 where 0 represents no time averaging with the last analysis frame
+			analyserNode.connect(context.destination);
+
+			var dynamicsNode = c.Sound.activePlugin.dynamicsCompressorNode;
+			dynamicsNode.disconnect();  // disconnect from destination
+			dynamicsNode.connect(analyserNode);
+
+			// set up the arrays that we use to retrieve the analyserNode data
+			freqFloatData = new Float32Array(analyserNode.frequencyBinCount);
+			freqByteData = new Uint8Array(analyserNode.frequencyBinCount);
+			timeByteData = new Uint8Array(analyserNode.frequencyBinCount);
+
+			// calculate the number of array elements that represent each circle
+			frequencyBinCount = analyserNode.frequencyBinCount;
+
+			setupView();
+			setupTools();
+
+			soundInstance = c.Sound.play(src);
+
+			c.Ticker.timingMode = c.Ticker.RAF;
+			listener = c.Ticker.on("tick", tick);
+		}
+
+		function setupView() {
+			stage = new c.Stage("tree");
+
+			w = stage.canvas.width;
+			h = stage.canvas.height;
+			shape = stage.addChild(new c.Shape());
+			shape.cache(0,0,w,h);
+			g = shape.graphics;
+
+			branches = [];
+			var branch = addBranch(w/2, h, -90, maxSize, 0);
+			branch.next = 20;
+		}
+
+		function setupTools() {
+			r = new createjs.Shape();
+			stage.addChild(r);
+			dt = new createjs.Shape();
+			stage.addChild(dt);
+
+			r2 = new createjs.Shape();
+			stage.addChild(r2);
+			st = new createjs.Shape();
+			stage.addChild(st);
+
+			bl = new createjs.Shape();
+			stage.addChild(bl);
+		}
+
+
+// Analysing audio and triggering draws
+		function tick(evt) {
+			if (soundInstance.playState == c.Sound.PLAY_FINISHED) {
+				c.Ticker.off("tick", listener);
+				stage.canvas.style.border = "8px solid black";
+				return;
+			}
+
+			analyserNode.smoothingTimeConstant = SMOOTHING_TIME;
+			analyserNode.getByteFrequencyData(freqByteData);  // this gives us the frequency
+			analyserNode.getByteTimeDomainData(timeByteData);  // this gives us the waveform
+
+			var dBsSum = 0, freqSum = 0, timeSum = 0;
+			for (var i = 0, l = frequencyBinCount; i < l; i++) {
+				freqSum += freqByteData[i];
+				timeSum += timeByteData[i];
+			}
+			freqSum = freqSum / frequencyBinCount / 256;	// / 256 gives percent 0 - 1
+			timeSum = timeSum / frequencyBinCount / 256;
+
+			longAverage.shift();
+			longAverage.push(dataAverage.shift());
+			dataAverage.push(timeSum);
+
+			var longSum = 0;
+			for (var i = longAverage.length; i--; ) {
+				longSum += longAverage[i];
+			}
+			longSum = longSum / longAverage.length;
+			var dataSum = 0;
+			for (var i = dataAverage.length; i--; ) {
+				dataSum += dataAverage[i];
+			}
+			dataSum = dataSum / dataAverage.length;
+			var dataSumDiff = longSum - dataSum;
+
+			var dataDiff = Math.abs(timeSum - 0.5);	// 0.5 equals no wave
+
+			/*
+			var longDiff = Math.abs(longSum - 0.5);
+			var avgDiff = Math.abs(dataSum - 0.5);
+			*/
+
+			if(showTools) {drawTools(dataDiff, dataSumDiff);}
+
+			if(currentBranch == null) {
+				if (dataDiff > drawTrigger && branches.length) {
+					currentBranch = branches.shift();
+					tickBranch(currentBranch);
+					for (var i = dataAverage.length; i--; ) {
+						dataAverage[i] = timeSum;
+					}
+					for (var i = longAverage.length; i--; ) {
+						longAverage[i] = timeSum;
+					}
+				}
+			} else {
+				triggerTicks--;
+				if ((dataSumDiff > stopDrawTrigger) && triggerTicks < 0) { // && triggerTicks < 0
+					runBranch(currentBranch);
+					currentBranch = null;
+					triggerTicks = TRIG_TICKS_DEFAULT;
+				} else {
+					tickBranch(currentBranch);
+				}
+			}
+
+			shape.updateCache("source-over");
+			g.store();
+
+			stage.update(evt);
+		}
+
+
+// handle drawing
+		function drawTools(dataDiff, dataSumDiff) {
+			r.graphics = new c.Graphics();
+			r.graphics.beginFill("white").drawRect(0, 0, 50, dataDiff*1000);
+			r.x = w - 50;
+			r.y = h - dataDiff*1000;
+
+			dt.graphics = new c.Graphics();
+			dt.graphics.beginFill("green").drawRect(0, 0, 50, 2);
+			dt.x = w - 50;
+			dt.y = h - 2 - drawTrigger*1000;
+
+			r2.graphics = new c.Graphics();
+			r2.graphics.beginFill("white").drawRect(0, 0, 50, dataSumDiff*1000);
+			r2.x = w - 110;
+			r2.y = h - dataSumDiff*1000;
+
+			st.graphics = new c.Graphics();
+			st.graphics.beginFill("red").drawRect(0, 0, 50, 2);
+			st.x = w - 110;
+			st.y = h - 2 - stopDrawTrigger*1000;
+
+			bl.graphics = new c.Graphics();
+			bl.graphics.beginFill("grey").drawRect(0, 0, 110, 10);
+			bl.x = w - 110;
+			bl.y = h - 10;
+		}
+
+		function runBranch(branch) {
+			while (tickBranch(branch)) {
+				// just keep ticking
+			}
+		}
+
+		function tickBranch(branch) {
+			branch.update();
+			var size = (branch.size *= 0.98);
+			if (size < 0.5) { return false; }
+			g.s(c.Graphics.getHSL(branch.hue, 50, 30)).ss(size, "round").mt(branch.oldX, branch.oldY).lt(branch.x, branch.y);
+			branch.hue += branch.hueV;
+			branch.speed = 5;
+			branch.varyRotation = (1-size/maxSize)*0.05;
+			if (branch.next-- < 0) {
+				doBranch(branch);
+			}
+			return true;
+		}
+
+		function doBranch(branch) {
+			var r = Rnd.sign()*Rnd(30,40), size = Rnd(0.5, 0.9);
+			branch.size *= 1-size*0.15;
+			branch.rotation += r*size*0.5;
+			//branch.next = maxSize*0.2+size*Rnd(gr*0.6, gr*1.4);
+			return addBranch(branch.x, branch.y, branch.rotation-r, branch.size*size, branch.hue);
+		}
+
+		function addBranch(x, y, rotation, size, hue) {
+			var w = new Wander({x:x, y:y, size:size, rotation:rotation, speed:5, varyRotation:0.01});
+			w.next = Rnd(size,size*gr);
+			w.hue = hue;
+			w.hueV = Rnd(1,2)*Rnd.sign();
+			branches.push(w);
+			return w;
+		}
+
+	</script>
+
+</body>
+</html>

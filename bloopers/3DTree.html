@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html>
+<head lang="en">
+	<meta charset="UTF-8">
+	<title>Tree Visualizer</title>
+	<style type="text/css">
+		body { background: #eee; }
+		.content {
+			display: block;
+			position: relative;
+		}
+		.tree {
+			position: absolute;
+			left: 0px;
+			top: 0;
+			background: #222;
+			border: 8px solid red;
+		}
+		.controls {
+			position: absolute;
+			left: 816px;
+			top: 0;
+			margin: 16px;
+		}
+	</style>
+
+</head>
+<body onload="setup()">
+	<div class="content">
+		<canvas id="tree" class="tree" width="800" height="800"></canvas>
+		<div class="controls">
+<!-- Analyser Triggers -->
+			<h3>Analyser Trigger Values</h3>
+			<div>
+				<label for=smoothy>Smoothing Time</label>
+				<input type=range min=0 max=1 value=0 id=smoothy step=0.05 oninput="createjs.proxy(handleSlider(value, 'SMOOTHING_TIME'),this)">
+				<output for=smoothy id=smoothyOut>1.00</output>
+			</div>
+			<div>
+				<label for=trigger>Draw Trigger</label>
+				<input type=range min=0 max=0.5 value=0 id=trigger step=0.01 oninput="createjs.proxy(handleSlider(value, 'drawTrigger'),this)">
+				<output for=drawTrigger id=triggerOut>0.15</output>
+			</div>
+			<div>
+				<label for=stopTrigger>Stop Draw Trigger</label>
+				<input type=range min=0 max=0.5 value=0.015 id=stopTrigger step=0.01 oninput="createjs.proxy(handleSlider(value, 'stopDrawTrigger'),this)">
+				<output for=stopTrigger id=stopTriggerOut>0.15</output>
+			</div>
+			<div>
+				<label for=trigTime>Trigger Time Delay</label>
+				<input type=range min=0 max=24 value=8 id=trigTime step=1 oninput="createjs.proxy(handleSlider(value, 'TRIG_TICKS_DEFAULT'),this)">
+				<output for=trigTime id=trigTimeOut>8</output>
+			</div>
+			<div>
+				<label for=dataAverage>dataAverage Length</label>
+				<input type=range min=1 max=12 value=3 id=dataAverage step=1 oninput="createjs.proxy(handleArraySlider(value, 'dataAverage'),this)">
+				<output for=dataAverage id=dataAverageOut>8</output>
+
+				<label for=longAverage>longAverage Length</label>
+				<input type=range min=3 max=18 value=3 id=longAverage step=1 oninput="createjs.proxy(handleArraySlider(value, 'longAverage'),this)">
+				<output for=longAverage id=longAverageOut>8</output>
+			</div>
+
+<!-- Draw Values -->
+			<h3>Draw Values</h3>
+			<div>
+				<label for=treeSize>Tree Max Size</label>
+				<input type=range min=0 max=80 value=40 id=treeSize step=1 oninput="createjs.proxy(handleSlider(value, 'maxSize'),this)">
+				<output for=treeSize id=treeSizeOut>8</output>
+			</div>
+			<div>
+				<label for=treegr>Next Branch Factor</label>
+				<input type=range min=1 max=2.5 value=1.618 id=treegr step=0.001 oninput="createjs.proxy(handleSlider(value, 'gr'),this)">
+				<output for=treegr id=treegrOut>8</output>
+			</div>
+			<div>
+				<label for=sizeCutoff>Branch Size Change Cutoff</label>
+				<input type=range min=0.1 max=0.7 value=0.5 id=sizeCutoff step=0.05 oninput="createjs.proxy(handleSlider(value, 'sizeCutoff'),this)">
+				<output for=sizeCutoff id=sizeCutoffOut>8</output>
+			</div>
+			<!--
+			<div>
+				<label for=bR>Branch Size Reduction</label>
+				<input type=range min=0.8 max=0.99 value=0.98 id=bR step=0.01 oninput="createjs.proxy(handleSlider(value, 'branchReduction'),this)">
+				<output for=bR id=bROut>8</output>
+			</div>
+			-->
+			<!--
+			<div>
+				<label for=speed>Speed</label>
+				<input type=range min=1 max=10 value=5 id=speed step=1 oninput="createjs.proxy(handleSlider(value, 'speed'),this)">
+				<output for=speed id=speedOut>8</output>
+			</div>
+			-->
+			<div>
+				<label for=minSizeChange>Branch Size Change Min</label>
+				<input type=range min=0 max=1 value=5 id=minSizeChange step=0.1 oninput="createjs.proxy(handleSlider(value, 'minSizeChange'),this)">
+				<output for=minSizeChange id=minSizeChangeOut>8</output>
+				<label for=maxSizeChange>Max</label>
+				<input type=range min=0.5 max=1 value=5 id=maxSizeChange step=0.1 oninput="createjs.proxy(handleSlider(value, 'maxSizeChange'),this)">
+				<output for=maxSizeChange id=maxSizeChangeOut>8</output>
+			</div>
+			<div>
+				<label for=sizeScale>Branch Size Scale Down</label>
+				<input type=range min=0 max=0.4 value=0.15 id=sizeScale step=.01 oninput="createjs.proxy(handleSlider(value, 'sizeScale'),this)">
+				<output for=sizeScale id=sizeScaleOut>8</output>
+			</div>
+			<div>
+				<label for=branchSizeCutoff>Branch Size Cutoff</label>
+				<input type=range min=0 max=2 value=0.15 id=branchSizeCutoff step=.1 oninput="createjs.proxy(handleSlider(value, 'branchSizeCutoff'),this)">
+				<output for=branchSizeCutoff id=branchSizeCutoffOut>8</output>
+			</div>
+			<div>
+				<label for=nextScale>Next Branch maxSize Scale Down</label>
+				<input type=range min=0 max=0.4 value=0.2 id=nextScale step=.1 oninput="createjs.proxy(handleSlider(value, 'nextScale'),this)">
+				<output for=nextScale id=nextScaleOut>8</output>
+			</div>
+			<div>
+				<label for=minNextChange>Next Branch Add Min</label>
+				<input type=range min=0 max=1.4 value=0.6 id=minNextChange step=.1 oninput="createjs.proxy(handleSlider(value, 'minNextChange'),this)">
+				<output for=minNextChange id=minNextChangeOut>8</output>
+				<label for=maxNextChange>Max</label>
+				<input type=range min=0.6 max=2.2 value=1.4 id=maxNextChange step=.1 oninput="createjs.proxy(handleSlider(value, 'maxNextChange'),this)">
+				<output for=maxNextChange id=maxNextChangeOut>8</output>
+			</div>
+		</div>
+	</div>
+	<script src="../js/easeljs-NEXT.combined.js"></script>
+	<script src="../js/soundjs-NEXT.combined.js"></script>
+	<script src="../js/Rnd.js"></script>
+	<script src="../js/Wander.js"></script>
+
+	<script>
+		// TODO add file selector with default option
+		var c = createjs;
+
+// Audio setup code
+		var FFTSIZE = 32;	// number of samples for the analyser node FFT, min 32
+		var SMOOTHING_TIME = 0.80;
+		var src = "../audio/TheHangingTree.mp3";
+		var soundInstance, analyserNode, freqByteData, timeByteData, frequencyBinCount;
+
+
+// Analyser code for triggering draws
+		var TRIG_TICKS_DEFAULT = 4;
+		var dataAverage = [0, 0, 0, 0];
+		var longAverage = [0, 0, 0, 0];
+		var drawTrigger = 0.03, stopDrawTrigger = 0.02;
+		var triggerTicks = TRIG_TICKS_DEFAULT;
+		var overDrawTick;
+
+
+// Tree Graphics code
+		var gr = 1.618;
+		var maxSize = 60;
+		var branchReduction = 0.98;
+		var sizeCutoff = 0.5;
+		var speed = 5;
+		var minSizeChange = 0.8;
+		var maxSizeChange = 0.9;
+		var sizeScale = 0.15;
+		var branchSizeCutoff = 0.7;
+		var nextScale = 0.2;
+		var minNextChange = 0.6;
+		var maxNextChange = 1.4;
+		var stage, w, h, branches, currentBranch, shape, g, listener, highlight;
+
+
+// Tools and inputs
+		var elHash = {};
+		var showTools = true;
+		var r, dt, r2, st, bl;
+
+
+// Setup
+		function setup() {
+			if (!c.Sound.registerPlugins([c.WebAudioPlugin])) {
+				console.log("Web Audio capable browser is required.")
+				return;
+			}
+
+			setupInputs();
+
+			c.Sound.addEventListener("fileload", c.proxy(handleLoad, this));
+			c.Sound.registerSound(src);
+		}
+
+		function  setupInputs() {
+			// analyser values
+			addInput("SMOOTHING_TIME", "#smoothy");
+			addInput("drawTrigger", "#trigger");
+			addInput("stopDrawTrigger", "#stopTrigger");
+			addInput("TRIG_TICKS_DEFAULT", "#trigTime");
+			addArrayInput("dataAverage", "#dataAverage");
+			addArrayInput("longAverage", "#longAverage");
+
+			// draw values
+			addInput("maxSize", "#treeSize");
+			addInput("gr", "#treegr");
+			addInput("sizeCutoff", "#sizeCutoff");
+			//addInput("branchReduction", "#bR");
+			//addInput("speed", "#speed");
+			addInput("minSizeChange", "#minSizeChange");
+			addInput("maxSizeChange", "#maxSizeChange");
+			addInput("sizeScale", "#sizeScale");
+			addInput("branchSizeCutoff", "#branchSizeCutoff");
+			addInput("nextScale", "#nextScale");
+			addInput("minNextChange", "#minNextChange");
+			addInput("maxNextChange", "#maxNextChange");
+		}
+
+		function addInput(propName, elName) {
+			var el = elHash[propName] = document.querySelector(elName+"Out");
+			var slider = document.querySelector(elName);
+			slider.value = el.value = this[propName];
+		}
+
+		function addArrayInput(propName, elName) {
+			var el = elHash[propName] = document.querySelector(elName+"Out");
+			var slider = document.querySelector(elName);
+			slider.value = el.value = this[propName].length ;
+		}
+
+		function handleSlider(val, hashString) {
+			this.elHash[hashString].value = val;
+			this[hashString] = val;
+		}
+
+		function handleArraySlider(val, hashString) {
+			this.elHash[hashString].value = val;
+			var a = this[hashString];
+			var l = a.length;
+			if(val > l) {
+				for(var i = l; i < val; i++) {
+					a[i] = a[l-1];
+				}
+			} else {
+				a.length = val;
+			}
+
+		}
+
+		function handleLoad(evt) {
+			var context = c.Sound.activePlugin.context;
+
+			analyserNode = context.createAnalyser();
+			analyserNode.fftSize = FFTSIZE;  //The size of the FFT used for frequency-domain analysis. This must be a power of two
+			analyserNode.smoothingTimeConstant = SMOOTHING_TIME;  //A value from 0 -> 1 where 0 represents no time averaging with the last analysis frame
+			analyserNode.connect(context.destination);
+
+			var dynamicsNode = c.Sound.activePlugin.dynamicsCompressorNode;
+			dynamicsNode.disconnect();  // disconnect from destination
+			dynamicsNode.connect(analyserNode);
+
+			// set up the arrays that we use to retrieve the analyserNode data
+			freqFloatData = new Float32Array(analyserNode.frequencyBinCount);
+			freqByteData = new Uint8Array(analyserNode.frequencyBinCount);
+			timeByteData = new Uint8Array(analyserNode.frequencyBinCount);
+
+			// calculate the number of array elements that represent each circle
+			frequencyBinCount = analyserNode.frequencyBinCount;
+
+			setupView();
+			setupTools();
+
+			soundInstance = c.Sound.play(src);
+
+			c.Ticker.timingMode = c.Ticker.RAF;
+			listener = c.Ticker.on("tick", tick);
+		}
+
+		function setupView() {
+			stage = new c.Stage("tree");
+
+			w = stage.canvas.width;
+			h = stage.canvas.height;
+
+			highlight = stage.addChild(new c.Shape());
+			//highlight.x = w/2;
+			//highlight.y = h;
+			//highlight.graphics.beginFill("White").drawCircle(0, 0, 3);
+
+			shape = stage.addChild(new c.Shape());
+			shape.cache(0,0,w,h);
+			g = shape.graphics;
+
+
+			branches = [];
+			var branch = addBranch(w/2, h, -90, maxSize, 0);
+			branch.next = 20;
+		}
+
+		function setupTools() {
+			r = new createjs.Shape();
+			stage.addChild(r);
+			dt = new createjs.Shape();
+			stage.addChild(dt);
+
+			r2 = new createjs.Shape();
+			stage.addChild(r2);
+			st = new createjs.Shape();
+			stage.addChild(st);
+
+			bl = new createjs.Shape();
+			stage.addChild(bl);
+		}
+
+
+// Analysing audio and triggering draws
+		function tick(evt) {
+			if (soundInstance.playState == c.Sound.PLAY_FINISHED) {
+				c.Ticker.off("tick", listener);
+				stage.canvas.style.border = "8px solid black";
+				return;
+			}
+
+			analyserNode.smoothingTimeConstant = SMOOTHING_TIME;
+			analyserNode.getByteFrequencyData(freqByteData);  // this gives us the frequency
+			analyserNode.getByteTimeDomainData(timeByteData);  // this gives us the waveform
+
+			var dBsSum = 0, freqSum = 0, timeSum = 0;
+			for (var i = 0, l = frequencyBinCount; i < l; i++) {
+				freqSum += freqByteData[i];
+				timeSum += Math.abs(timeByteData[i]-127);
+			}
+			freqSum = freqSum / frequencyBinCount / 256;	// / 256 gives percent 0 - 1
+			timeSum = timeSum / frequencyBinCount / 256;
+
+			longAverage.shift();
+			longAverage.push(dataAverage.shift());
+			dataAverage.push(timeSum);
+
+			var longSum = 0;
+			for (var i = longAverage.length; i--; ) {
+				longSum += longAverage[i];
+			}
+			longSum = longSum / longAverage.length;
+			var dataSum = 0;
+			for (var i = dataAverage.length; i--; ) {
+				dataSum += dataAverage[i];
+			}
+			dataSum = dataSum / dataAverage.length;
+			var dataSumDiff = longSum - dataSum;
+
+			var dataDiff = timeSum;
+
+			if(showTools) {drawTools(dataDiff, dataSumDiff);}
+
+			if(currentBranch == null) {
+				if (dataDiff > drawTrigger && branches.length) {
+					currentBranch = branches.shift();
+					//stage.addChild(highlight);
+					tickBranch(currentBranch);
+					for (var i = dataAverage.length; i--; ) {
+						dataAverage[i] = timeSum;
+					}
+					for (var i = longAverage.length; i--; ) {
+						longAverage[i] = timeSum;
+					}
+				}
+			} else {
+				triggerTicks--;
+				if ((dataSumDiff > stopDrawTrigger) && triggerTicks < 0) { // && triggerTicks < 0
+					runBranch(currentBranch);
+					//stage.removeChild(highlight);
+					currentBranch = null;
+					triggerTicks = TRIG_TICKS_DEFAULT;
+					overDrawTick = null;
+				} else {
+					if (!tickBranch(currentBranch)) {
+						//stage.removeChild(highlight);
+						if (overDrawTick == null) {
+							overDrawTick = triggerTicks;
+						} else if (overDrawTick - triggerTicks > TRIG_TICKS_DEFAULT){
+							//currentBranch = branches.shift();
+							currentBranch = null;
+							triggerTicks = TRIG_TICKS_DEFAULT;
+							overDrawTick = null;
+						}
+					}
+				}
+			}
+
+			shape.updateCache("source-over");
+			g.store();
+
+			stage.update(evt);
+		}
+
+
+// handle drawing
+		function drawTools(dataDiff, dataSumDiff) {
+			r.graphics = new c.Graphics();
+			r.graphics.beginFill("white").drawRect(0, 0, 50, dataDiff*1000);
+			r.x = w - 50;
+			r.y = h - dataDiff*1000;
+
+			dt.graphics = new c.Graphics();
+			dt.graphics.beginFill("green").drawRect(0, 0, 50, 2);
+			dt.x = w - 50;
+			dt.y = h - 2 - drawTrigger*1000;
+
+			r2.graphics = new c.Graphics();
+			r2.graphics.beginFill("white").drawRect(0, 0, 50, dataSumDiff*1000);
+			r2.x = w - 110;
+			r2.y = h - dataSumDiff*1000;
+
+			st.graphics = new c.Graphics();
+			st.graphics.beginFill("red").drawRect(0, 0, 50, 2);
+			st.x = w - 110;
+			st.y = h - 2 - stopDrawTrigger*1000;
+
+			bl.graphics = new c.Graphics();
+			bl.graphics.beginFill("grey").drawRect(0, 0, 110, 10);
+			bl.x = w - 110;
+			bl.y = h - 10;
+		}
+
+		function runBranch(branch) {
+			while (tickBranch(branch)) {
+				// just keep ticking
+			}
+		}
+
+		function tickBranch(branch) {
+			branch.update();
+			var size = (branch.size *= branchReduction);
+			if (size < sizeCutoff) { return false; }
+			g.s(c.Graphics.getHSL(branch.hue, 50, 30)).ss(size, "round").mt(branch.oldX, branch.oldY).lt(branch.x, branch.y);
+
+			highlight = stage.addChild(new c.Shape());
+			highlight.x = branch.oldX;
+			highlight.y = branch.oldY;
+			highlight.graphics.s("white").ss(size, "round").mt(0, 0).lt(branch.x, branch.y);
+
+			branch.hue += branch.hueV;
+			branch.speed = speed;
+			branch.varyRotation = (1-size/maxSize)*0.05;
+			if (branch.next-- < 0) {
+				doBranch(branch);
+			}
+			highlight.x = branch.x;
+			highlight.y = branch.y;
+			return true;
+		}
+
+		function doBranch(branch) {
+			var r = Rnd.sign()*Rnd(30,40), size = Rnd(minSizeChange, maxSizeChange);
+			branch.size *= 1-size*sizeScale;
+			branch.rotation += r*size*0.5;
+			branch.next = maxSize*nextScale+size*gr*Rnd(minNextChange, maxNextChange);
+			return addBranch(branch.x, branch.y, branch.rotation-r, branch.size*size, branch.hue);
+		}
+
+		function addBranch(x, y, rotation, size, hue) {
+			if (size < branchSizeCutoff) {return;}
+			var w = new Wander({x:x, y:y, size:size, rotation:rotation, speed:speed, varyRotation:0.01});
+			w.next = Rnd(size,size*gr);
+			w.hue = hue;
+			w.hueV = Rnd(1,2)*Rnd.sign();
+			branches.push(w);
+			return w;
+		}
+
+	</script>
+
+</body>
+</html>
