@@ -32,6 +32,9 @@
 <!-- Analyser Triggers -->
 			<h3>Analyser Trigger Values</h3>
 			<div>
+				<button onclick="setup()" >Play</button>
+			</div>
+			<div>
 				<label for=smoothy>Smoothing Time</label>
 				<input type=range min=0 max=1 value=0 id=smoothy step=0.05 oninput="createjs.proxy(handleSlider(value, 'SMOOTHING_TIME'),this)">
 				<output for=smoothy id=smoothyOut>1.00</output>
